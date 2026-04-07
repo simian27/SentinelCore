@@ -1,0 +1,5 @@
+{
+  "name": "SentinelCore",
+  "description": "The Enterprise-Grade AI Safety & Governance Layer. Secure, evaluate, and orchestrate LLM interactions at scale with real-time logic gates and deep audit logging.",
+  "requestFramePermissions": []
+}

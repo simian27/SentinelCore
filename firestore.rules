@@ -1,0 +1,194 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches Auth UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - displayName: string (optional)
+    //   - createdAt: timestamp (required)
+    //   - orgId: string (optional)
+    //   - role: string (optional, 'admin' or 'member')
+    //
+    // Collection: organizations
+    // Document ID: {orgId}
+    // Fields:
+    //   - name: string (required)
+    //   - ownerId: string (required)
+    //   - createdAt: timestamp (required)
+    //   - policies: array (optional)
+    //
+    // Collection: sessions
+    // Document ID: {sessionId}
+    // Fields:
+    //   - userId: string (required, matches owner)
+    //   - orgId: string (optional)
+    //   - title: string (optional)
+    //   - targetModel: string (optional)
+    //   - createdAt: timestamp (required)
+    //   - lastUpdatedAt: timestamp (required)
+    //
+    // Collection: sessions/{sessionId}/messages
+    // Document ID: {messageId}
+    // Fields:
+    //   - sessionId: string (required)
+    //   - role: string (required, 'user' or 'assistant')
+    //   - content: string (required, max 5000 chars)
+    //   - sentinelResult: map (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: audit_logs
+    // Document ID: {logId}
+    // Fields:
+    //   - userId: string (required)
+    //   - orgId: string (optional)
+    //   - prompt: string (required)
+    //   - result: map (required)
+    //   - targetModel: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userOrgId() {
+      return getUserData().orgId;
+    }
+
+    function isInOrg(orgId) {
+      return isAuthenticated() && userOrgId() == orgId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData().role == 'admin' ||
+         (request.auth.token.email == "nickobro1master@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isSessionOwner(sessionId) {
+      let session = get(/databases/$(database)/documents/sessions/$(sessionId)).data;
+      return isAuthenticated() && (session.userId == request.auth.uid || (session.orgId != null && session.orgId == userOrgId()));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             (data.email == null || isValidEmail(data.email)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidOrganization(data) {
+      return data.keys().hasAll(['name', 'ownerId', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerId == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidSession(data) {
+      return data.keys().hasAll(['userId', 'createdAt', 'lastUpdatedAt']) &&
+             data.userId == request.auth.uid &&
+             data.createdAt is timestamp &&
+             data.lastUpdatedAt is timestamp &&
+             (!('orgId' in data) || data.orgId == userOrgId());
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['sessionId', 'role', 'content', 'createdAt']) &&
+             data.role in ['user', 'assistant'] &&
+             data.content is string && data.content.size() <= 1048576 &&
+             data.createdAt is timestamp &&
+             (!('type' in data) || data.type is string) &&
+             (!('sentinelResult' in data) || data.sentinelResult is map) &&
+             (!('isChunked' in data) || data.isChunked is bool) &&
+             (!('chunkCount' in data) || data.chunkCount is int) &&
+             (!('metadata' in data) || data.metadata == null || data.metadata is map) &&
+             (!('isTruncated' in data) || data.isTruncated is bool);
+    }
+
+    function isValidChunk(data) {
+      return data.keys().hasAll(['index', 'data']) &&
+             data.index is int &&
+             data.data is string && data.data.size() <= 1048576;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['userId', 'prompt', 'result', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.prompt is string &&
+             data.result is map &&
+             data.createdAt is timestamp &&
+             (!('orgId' in data) || data.orgId == userOrgId());
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    // Organizations
+    match /organizations/{orgId} {
+      allow read: if isAuthenticated() && (isInOrg(orgId) || isAdmin());
+      allow create: if isAuthenticated() && isValidOrganization(request.resource.data);
+      allow update: if isAuthenticated() && (isInOrg(orgId) || isAdmin()) && isValidOrganization(request.resource.data);
+    }
+
+    // Chat sessions
+    match /sessions/{sessionId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || (resource.data.orgId != null && resource.data.orgId == userOrgId()) || isAdmin());
+      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || (resource.data.orgId != null && resource.data.orgId == userOrgId()) || isAdmin()) && isValidSession(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if isSessionOwner(sessionId) || isAdmin();
+        allow create: if isSessionOwner(sessionId) && isValidMessage(request.resource.data);
+        allow update: if isSessionOwner(sessionId) && isValidMessage(request.resource.data);
+        allow delete: if isSessionOwner(sessionId) || isAdmin();
+
+        // Chunks subcollection for large assets
+        match /chunks/{chunkId} {
+          allow read: if isSessionOwner(sessionId) || isAdmin();
+          allow create: if isSessionOwner(sessionId) && isValidChunk(request.resource.data);
+        }
+      }
+    }
+
+    // Audit logs
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || (resource.data.orgId != null && resource.data.orgId == userOrgId()) || isAdmin());
+      allow create: if isAuthenticated() && isValidAuditLog(request.resource.data);
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Sentinel system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth ID." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "displayName": { "type": "string", "description": "User's display name." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user account was created." },
+        "orgId": { "type": "string", "description": "The ID of the organization the user belongs to." },
+        "role": { "type": "string", "enum": ["admin", "member"], "description": "User's role within the organization." },
+        "subscription": {
+          "type": "object",
+          "properties": {
+            "plan": { "type": "string", "enum": ["free", "pro", "enterprise"], "description": "The current subscription plan." },
+            "status": { "type": "string", "enum": ["active", "past_due", "canceled"], "description": "The status of the subscription." },
+            "expiresAt": { "type": "string", "format": "date-time", "description": "When the current subscription period ends." }
+          }
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Organization": {
+      "title": "Organization",
+      "description": "A group of users collaborating on SentinelCore.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the organization." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the organization was created." },
+        "ownerId": { "type": "string", "description": "The ID of the user who owns the organization." },
+        "policies": { "type": "array", "items": { "type": "object" }, "description": "Shared safety policies for the organization." }
+      },
+      "required": ["name", "ownerId", "createdAt"]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "A conversation session protected by Sentinel.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who owns this session." },
+        "orgId": { "type": "string", "description": "The ID of the organization this session belongs to." },
+        "title": { "type": "string", "description": "The title of the chat session." },
+        "targetModel": { "type": "string", "description": "The model being used (e.g., GPT-4o)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the session was started." },
+        "lastUpdatedAt": { "type": "string", "format": "date-time", "description": "When the last message was sent." }
+      },
+      "required": ["userId", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message in a chat session.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "description": "The ID of the parent chat session." },
+        "role": { "type": "string", "enum": ["user", "assistant"], "description": "Who sent the message." },
+        "content": { "type": "string", "description": "The content of the message." },
+        "sentinelResult": { "type": "object", "description": "The safety evaluation result for this message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
+      },
+      "required": ["sessionId", "role", "content", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "A detailed record of a Sentinel safety evaluation.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who triggered the evaluation." },
+        "orgId": { "type": "string", "description": "The ID of the organization this log belongs to." },
+        "prompt": { "type": "string", "description": "The prompt that was evaluated." },
+        "result": { "type": "object", "description": "The evaluation result, including metrics and reasoning." },
+        "targetModel": { "type": "string", "description": "The model the prompt was intended for." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the log was created." }
+      },
+      "required": ["userId", "prompt", "result", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/organizations/{orgId}": {
+      "schema": "Organization",
+      "description": "Organization data and shared policies."
+    },
+    "/sessions/{sessionId}": {
+      "schema": "ChatSession",
+      "description": "Chat sessions."
+    },
+    "/sessions/{sessionId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a session."
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "System audit logs for safety evaluations."
+    }
+  }
+}

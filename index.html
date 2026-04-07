@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sentinel - AI Safety Layer</title>
+    <script>
+      // Workaround for 'Cannot set property fetch of #<Window> which has only a getter'
+      // This prevents dependencies from crashing when trying to polyfill fetch in the AI Studio iframe.
+      try {
+        const originalFetch = window.fetch;
+        Object.defineProperty(window, 'fetch', {
+          get: () => originalFetch,
+          set: () => { /* Ignore attempts to overwrite */ },
+          configurable: true
+        });
+      } catch (e) {
+        console.warn('Sentinel: Failed to apply fetch workaround', e);
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

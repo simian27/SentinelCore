@@ -1,8 +1,8 @@
-import React from 'react';
-import { Shield, ChevronRight } from 'lucide-react';
-import { signInWithPopup } from 'firebase/auth';
+import React, { useState } from 'react';
+import { Shield, ChevronRight, Mail, Lock, User, ArrowLeft } from 'lucide-react';
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 const FloatingWidget = ({ children, delay = 0, x = 0, y = 0 }: { children: React.ReactNode, delay?: number, x?: number, y?: number }) => (
   <motion.div
@@ -27,11 +27,41 @@ const FloatingWidget = ({ children, delay = 0, x = 0, y = 0 }: { children: React
 );
 
 const AuthScreen = () => {
-  const handleLogin = async () => {
+  const [method, setMethod] = useState<'google' | 'email'>('google');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error("Login Error:", error);
+    }
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (mode === 'signup') {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        if (displayName) {
+          await updateProfile(userCredential.user, { displayName });
+        }
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err: any) {
+      console.error("Auth Error:", err);
+      setError(err.message || "An error occurred during authentication.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -187,21 +217,142 @@ const AuthScreen = () => {
             className="w-full max-w-sm space-y-12"
           >
             <div className="space-y-4">
-              <h2 className="text-4xl font-display font-bold tracking-tight">Access Dashboard</h2>
-              <p className="text-white/40 text-sm">Join your organization or start a new secure workspace.</p>
+              <h2 className="text-4xl font-display font-bold tracking-tight">
+                {mode === 'signin' ? 'Access Dashboard' : 'Create Account'}
+              </h2>
+              <p className="text-white/40 text-sm">
+                {mode === 'signin' 
+                  ? 'Join your organization or start a new secure workspace.' 
+                  : 'Start securing your AI infrastructure today.'}
+              </p>
             </div>
 
-            <div className="space-y-4">
-              <button 
-                onClick={handleLogin}
-                className="group w-full bg-white text-black hover:bg-white/90 h-16 rounded-full font-bold flex items-center justify-between px-8 transition-all active:scale-[0.98] shadow-[0_0_40px_rgba(255,255,255,0.1)]"
-              >
-                <div className="flex items-center gap-3">
-                  <img src="https://www.google.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Google" />
-                  <span>Continue with Google</span>
-                </div>
-                <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-              </button>
+            <div className="space-y-6">
+              <AnimatePresence mode="wait">
+                {method === 'google' ? (
+                  <motion.div
+                    key="google-method"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-4"
+                  >
+                    <button 
+                      onClick={handleGoogleLogin}
+                      className="group w-full bg-white text-black hover:bg-white/90 h-16 rounded-full font-bold flex items-center justify-between px-8 transition-all active:scale-[0.98] shadow-[0_0_40px_rgba(255,255,255,0.1)]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <img src="https://www.google.com/favicon.ico" className="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" alt="Google" />
+                        <span>Continue with Google</span>
+                      </div>
+                      <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+
+                    <button 
+                      onClick={() => setMethod('email')}
+                      className="w-full h-16 rounded-full border border-white/10 hover:bg-white/5 font-bold flex items-center justify-center gap-3 transition-all"
+                    >
+                      <Mail size={18} className="text-white/40" />
+                      <span>Continue with Email</span>
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="email-method"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <button 
+                      onClick={() => setMethod('google')}
+                      className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white transition-colors"
+                    >
+                      <ArrowLeft size={12} />
+                      Back to Google Login
+                    </button>
+
+                    <form onSubmit={handleEmailAuth} className="space-y-4">
+                      {mode === 'signup' && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 ml-4">Full Name</label>
+                          <div className="relative">
+                            <User className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                            <input 
+                              type="text"
+                              required
+                              value={displayName}
+                              onChange={(e) => setDisplayName(e.target.value)}
+                              placeholder="John Doe"
+                              className="w-full bg-white/5 border border-white/10 rounded-full h-14 pl-14 pr-6 text-sm outline-none focus:border-white/20 transition-all"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 ml-4">Email Address</label>
+                        <div className="relative">
+                          <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                          <input 
+                            type="email"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="name@company.com"
+                            className="w-full bg-white/5 border border-white/10 rounded-full h-14 pl-14 pr-6 text-sm outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 ml-4">Password</label>
+                        <div className="relative">
+                          <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                          <input 
+                            type="password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="w-full bg-white/5 border border-white/10 rounded-full h-14 pl-14 pr-6 text-sm outline-none focus:border-white/20 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {error && (
+                        <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest text-center px-4">
+                          {error}
+                        </p>
+                      )}
+
+                      <button 
+                        type="submit"
+                        disabled={loading}
+                        className="w-full bg-white text-black hover:bg-white/90 h-14 rounded-full font-bold flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50"
+                      >
+                        {loading ? (
+                          <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <span>{mode === 'signin' ? 'Sign In' : 'Create Account'}</span>
+                            <ChevronRight size={18} />
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="text-center">
+                <button 
+                  onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+                  className="text-[10px] font-bold uppercase tracking-widest text-white/40 hover:text-white transition-colors"
+                >
+                  {mode === 'signin' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+                </button>
+              </div>
 
               <div className="pt-8 space-y-8">
                 <div className="flex items-center gap-4">

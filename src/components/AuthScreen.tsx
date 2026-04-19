@@ -36,10 +36,20 @@ const AuthScreen = () => {
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
+    setError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error("Login Error:", error);
+    } catch (err: any) {
+      console.error("Google Login Error:", err);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError("This domain is not authorized for Google Sign-In. Add this URL to 'Authorized Domains' in the Firebase Console.");
+      } else if (err.code === 'auth/popup-blocked') {
+        setError("The login popup was blocked. Please allow popups for this site.");
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // Ignore user cancellation
+      } else {
+        setError(err.message || "Google Sign-In failed.");
+      }
     }
   };
 
@@ -59,7 +69,15 @@ const AuthScreen = () => {
       }
     } catch (err: any) {
       console.error("Auth Error:", err);
-      setError(err.message || "An error occurred during authentication.");
+      if (err.code === 'auth/operation-not-allowed') {
+        setError("Email/Password provider is not enabled in the Firebase Console. Please enable it in Authentication > Sign-in method.");
+      } else if (err.code === 'auth/email-already-in-use') {
+        setError("This email is already associated with an account. Try signing in.");
+      } else if (err.code === 'auth/weak-password') {
+        setError("Password should be at least 6 characters.");
+      } else {
+        setError(err.message || "An error occurred during authentication.");
+      }
     } finally {
       setLoading(false);
     }
@@ -255,6 +273,12 @@ const AuthScreen = () => {
                       <Mail size={18} className="text-white/40" />
                       <span>Continue with Email</span>
                     </button>
+
+                    {error && (
+                      <p className="text-red-400 text-[10px] font-bold uppercase tracking-widest text-center px-4">
+                        {error}
+                      </p>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div
